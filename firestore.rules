@@ -30,17 +30,17 @@ service cloud.firestore {
     }
 
     function hasOwnUserProfile() {
-      return isVerified() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isVerified() && isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
     function ownUserRole() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role;
+      return hasOwnUserProfile() ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role : 'student';
     }
 
     function isAdmin() {
       return isVerified() && (
         isPrimaryAdminEmail() ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (isSignedIn() && exists(/databases/$(database)/documents/admins/$(request.auth.uid))) ||
         (hasOwnUserProfile() && ownUserRole() in ['admin', 'dev'])
       );
     }
@@ -718,13 +718,11 @@ service cloud.firestore {
         allow create: if isValidId(userId) && isValidId(topicId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidTopicProgress(incoming(), userId, topicId)
           && incoming().updatedAt == request.time;
         allow update: if isValidId(userId) && isValidId(topicId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidTopicProgress(incoming(), userId, topicId)
           && incoming().userId == existing().userId
           && incoming().topicId == existing().topicId
@@ -739,7 +737,6 @@ service cloud.firestore {
         allow create: if isValidId(userId) && isValidId(sessionId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidStudySession(incoming(), userId)
           && incoming().createdAt == request.time;
         allow delete: if isValidId(userId) && isValidId(sessionId) && isSignedIn() && isOwner(userId);
@@ -751,7 +748,6 @@ service cloud.firestore {
         allow create: if isValidId(userId) && isValidId(attemptId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidSimuladoAttempt(incoming(), userId)
           && incoming().createdAt == request.time;
         allow delete: if isValidId(userId) && isValidId(attemptId) && isSignedIn() && isOwner(userId);
@@ -763,14 +759,12 @@ service cloud.firestore {
         allow create: if isValidId(userId) && isValidId(entryId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidErrorEntry(incoming(), userId)
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
         allow update: if isValidId(userId) && isValidId(entryId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidErrorEntry(incoming(), userId)
           && incoming().userId == existing().userId
           && incoming().questionId == existing().questionId
@@ -789,13 +783,11 @@ service cloud.firestore {
         allow create: if isValidId(userId) && isValidId(disciplineId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidDisciplineGoal(incoming(), userId, disciplineId)
           && incoming().updatedAt == request.time;
         allow update: if isValidId(userId) && isValidId(disciplineId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidDisciplineGoal(incoming(), userId, disciplineId)
           && incoming().userId == existing().userId
           && incoming().disciplineId == existing().disciplineId
@@ -810,13 +802,11 @@ service cloud.firestore {
         allow create: if isValidId(userId) && isValidId(materialId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidReadingProgress(incoming(), userId, materialId)
           && incoming().updatedAt == request.time;
         allow update: if isValidId(userId) && isValidId(materialId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidReadingProgress(incoming(), userId, materialId)
           && incoming().userId == existing().userId
           && incoming().materialId == existing().materialId
@@ -835,13 +825,11 @@ service cloud.firestore {
         allow create: if isValidId(userId) && isValidId(mediaId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidMediaProgress(incoming(), userId, mediaId)
           && incoming().updatedAt == request.time;
         allow update: if isValidId(userId) && isValidId(mediaId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidMediaProgress(incoming(), userId, mediaId)
           && incoming().userId == existing().userId
           && incoming().mediaId == existing().mediaId
@@ -860,14 +848,12 @@ service cloud.firestore {
         allow create: if isValidId(userId) && isValidId(notificationId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidUserNotification(incoming(), userId, notificationId)
           && incoming().createdAt == request.time
           && incoming().updatedAt == request.time;
         allow update: if isValidId(userId) && isValidId(notificationId)
           && isSignedIn()
           && isOwner(userId)
-          && exists(/databases/$(database)/documents/users/$(userId))
           && isValidUserNotification(incoming(), userId, notificationId)
           && incoming().notificationId == existing().notificationId
           && incoming().userId == existing().userId

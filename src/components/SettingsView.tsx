@@ -166,6 +166,14 @@ export function SettingsView({
     void handleUpdateVisualPref({ hiddenDashboardCards: next });
   };
 
+  const handleHideAllCards = () => {
+    void handleUpdateVisualPref({ hiddenDashboardCards: [...orderedCards] });
+  };
+
+  const handleShowAllCards = () => {
+    void handleUpdateVisualPref({ hiddenDashboardCards: [] });
+  };
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -475,10 +483,29 @@ export function SettingsView({
           </div>
 
           {/* Dashboard Cards Ordering & Visibility */}
-          <div className="space-y-2">
-            <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-              Ordem e visibilidade dos blocos do Painel Inicial
-            </p>
+          <div className="space-y-2.5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-xs font-semibold text-slate-700 dark:text-slate-300">
+                Ordem e visibilidade dos blocos do Painel Inicial
+              </p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleShowAllCards}
+                  className="min-h-[36px] px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Mostrar todos
+                </button>
+                <button
+                  type="button"
+                  onClick={handleHideAllCards}
+                  className="min-h-[36px] px-2.5 py-1 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
+                >
+                  Ocultar todos
+                </button>
+              </div>
+            </div>
+
             <div className="space-y-1.5">
               {orderedCards.map((cardId, idx) => {
                 const isHidden = (preferences.hiddenDashboardCards || []).includes(cardId);
@@ -494,36 +521,36 @@ export function SettingsView({
                     >
                       {DASHBOARD_CARD_LABELS[cardId] || cardId}
                     </span>
-                    <div className="flex items-center gap-1 shrink-0">
+                    <div className="flex items-center gap-1.5 shrink-0">
                       <button
                         type="button"
                         disabled={idx === 0}
                         onClick={() => moveCardOrder(cardId, -1)}
                         aria-label="Mover bloco para cima"
-                        className="min-w-[32px] min-h-[32px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 disabled:opacity-40 flex items-center justify-center text-slate-600 dark:text-slate-300"
+                        className="min-w-[40px] min-h-[40px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 disabled:opacity-40 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                       >
-                        <ArrowUp className="w-3.5 h-3.5" />
+                        <ArrowUp className="w-4 h-4" />
                       </button>
                       <button
                         type="button"
                         disabled={idx === orderedCards.length - 1}
                         onClick={() => moveCardOrder(cardId, 1)}
                         aria-label="Mover bloco para baixo"
-                        className="min-w-[32px] min-h-[32px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 disabled:opacity-40 flex items-center justify-center text-slate-600 dark:text-slate-300"
+                        className="min-w-[40px] min-h-[40px] rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 disabled:opacity-40 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors"
                       >
-                        <ArrowDown className="w-3.5 h-3.5" />
+                        <ArrowDown className="w-4 h-4" />
                       </button>
                       <button
                         type="button"
                         onClick={() => toggleCardVisibility(cardId)}
                         aria-label={isHidden ? 'Mostrar bloco' : 'Ocultar bloco'}
-                        className={`min-w-[32px] min-h-[32px] rounded-lg border flex items-center justify-center ${
+                        className={`min-w-[40px] min-h-[40px] rounded-lg border flex items-center justify-center transition-colors ${
                           isHidden
-                            ? 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-400'
+                            ? 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
                             : 'border-emerald-200 dark:border-emerald-800 bg-[#E8F3EC] dark:bg-emerald-950/60 text-[#0B3321] dark:text-emerald-300'
                         }`}
                       >
-                        {isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        {isHidden ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                       </button>
                     </div>
                   </div>

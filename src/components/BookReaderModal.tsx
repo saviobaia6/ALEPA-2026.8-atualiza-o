@@ -24,6 +24,7 @@ import {
   PanelLeft,
   Plus,
   Search,
+  SlidersHorizontal,
   Sparkles,
   Square,
   StickyNote,
@@ -35,6 +36,7 @@ import {
   ZoomOut,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { parseGoogleWorkspaceUrl } from '../lib/googleWorkspace';
 import {
   classifyMaterialOpeningMode,
   loadAndParseEpub,
@@ -363,6 +365,7 @@ export function BookReaderModal({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [errorCode, setErrorCode] = useState<PdfSourceError['code'] | null>(null);
   const [connectingDrive, setConnectingDrive] = useState(false);
+  const [drivePreviewId, setDrivePreviewId] = useState<string | null>(null);
 
   const [pdfDoc, setPdfDoc] = useState<PDFDocumentProxy | null>(null);
   const [structuredBook, setStructuredBook] = useState<ParsedStructuredBook | null>(null);
@@ -405,6 +408,25 @@ export function BookReaderModal({
   const [lineHeight, setLineHeight] = useState<number>(initialSaved?.lineHeight || 1.65);
   const [maxWidthCh, setMaxWidthCh] = useState<number>(initialSaved?.maxWidthCh || 68);
   const [zoomScale, setZoomScale] = useState<number>(0); // 0 = ajustar à largura
+  const [hideAllToolbars, setHideAllToolbars] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('alepa_reader_hide_toolbars') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleHideAllToolbars = useCallback(() => {
+    setHideAllToolbars((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('alepa_reader_hide_toolbars', String(next));
+      } catch {
+        // ignore
+      }
+      return next;
+    });
+  }, []);
 
   const zoom = useFullscreenZoom({
     targetRef: rootRef,
@@ -509,6 +531,13 @@ export function BookReaderModal({
       if (blobUrlRef.current && blobUrlRef.current.startsWith('blob:')) {
         URL.revokeObjectURL(blobUrlRef.current);
         blobUrlRef.current = null;
+      }
+
+      const parsedDrive = parseGoogleWorkspaceUrl(material.url);
+      if (parsedDrive.kind === 'drive_file' && parsedDrive.id) {
+        setDrivePreviewId(parsedDrive.id);
+        setLoadingDoc(false);
+        return;
       }
 
       if (material.pendingDefinition) {
@@ -798,6 +827,11 @@ export function BookReaderModal({
     }
     if (pdfDocRef.current || structuredBookRef.current) {
       await flushProgress();
+    }
+    try {
+      await zoom.exitFullscreen();
+    } catch {
+      // ignore
     }
     if (document.fullscreenElement && document.exitFullscreen) {
       try {
@@ -1652,10 +1686,45 @@ export function BookReaderModal({
       aria-label={`Leitor Digital · ${material.title}`}
       className={`fixed inset-0 z-50 flex flex-col ${themeStyle.shellBg} ${themeStyle.textMain}`}
     >
+      {/* Floating Fullscreen Controls (Restore & Close X) */}
+      {isFullscreen && (
+        <div
+          className="fixed top-3 right-3 z-50 flex items-center gap-2 pointer-events-auto"
+          style={{
+            marginTop: 'max(0px, env(safe-area-inset-top, 0px))',
+            marginRight: 'max(0px, env(safe-area-inset-right, 0px))',
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => void zoom.exitFullscreen()}
+            title="Sair da tela cheia"
+            aria-label="Sair da tela cheia"
+            className="min-h-[44px] px-3.5 rounded-full bg-slate-900/80 hover:bg-slate-900 text-white text-xs font-semibold shadow-xl backdrop-blur-md border border-white/20 inline-flex items-center gap-1.5 transition-transform active:scale-95"
+          >
+            <Minimize2 className="w-4 h-4" />
+            <span className="hidden sm:inline">Restaurar</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleRequestClose()}
+            title="Fechar leitor e sair da tela cheia"
+            aria-label="Fechar leitor"
+            className="min-h-[44px] min-w-[44px] rounded-full bg-red-600/90 hover:bg-red-600 text-white shadow-xl backdrop-blur-md border border-white/20 flex items-center justify-center transition-transform active:scale-95"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+      )}
+
       {/* Floating Clean Reading Exit & Quick Nav Bar */}
       {cleanReading && !isFullscreen && (
         <div
           className={`fixed top-3 right-3 left-3 sm:left-auto z-50 border rounded-2xl px-3 py-2 shadow-lg flex flex-wrap items-center justify-between sm:justify-end gap-2 ${themeStyle.headerBg}`}
+          style={{
+            marginTop: 'max(0px, env(safe-area-inset-top, 0px))',
+            marginRight: 'max(0px, env(safe-area-inset-right, 0px))',
+          }}
         >
           <span className={`font-mono text-xs font-semibold tabular-nums ${themeStyle.textMuted}`}>
             {structuredBook ? `Cap. ${currentPage}/${numPages}` : `Pág. ${currentPage}/${numPages}`}
@@ -1695,8 +1764,16 @@ export function BookReaderModal({
               onClick={() => setCleanReading(false)}
               className="min-h-[36px] px-3 rounded-lg bg-[#0B3321] text-white text-xs font-semibold inline-flex items-center gap-1.5"
             >
-              <X className="w-3.5 h-3.5" />
               <span>Sair da leitura limpa</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleRequestClose()}
+              aria-label="Fechar leitor"
+              title="Fechar leitor"
+              className="min-h-[36px] min-w-[36px] rounded-lg border border-red-500/30 text-red-600 dark:text-red-400 hover:bg-red-500/10 flex items-center justify-center"
+            >
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
@@ -1839,6 +1916,22 @@ export function BookReaderModal({
             <span className="hidden sm:inline">Ferramentas</span>
           </button>
 
+          {/* Hide/Show Mode & Zoom Bar */}
+          <button
+            type="button"
+            onClick={toggleHideAllToolbars}
+            title={hideAllToolbars ? 'Expandir barra de ferramentas e zoom' : 'Recolher barra de ferramentas e zoom'}
+            aria-label={hideAllToolbars ? 'Expandir barra de ferramentas e zoom' : 'Recolher barra de ferramentas e zoom'}
+            className={`min-h-[40px] px-2.5 rounded-xl border text-xs font-medium inline-flex items-center gap-1.5 ${
+              hideAllToolbars
+                ? 'border-amber-500/50 bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                : 'border-current/15 hover:bg-slate-500/10'
+            }`}
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+            <span className="hidden xl:inline">{hideAllToolbars ? 'Expandir barras' : 'Recolher barras'}</span>
+          </button>
+
           {/* Fullscreen */}
           <button
             type="button"
@@ -1913,7 +2006,7 @@ export function BookReaderModal({
       )}
 
       {/* Secondary Mode-Specific Controls Bar */}
-      {!isFullscreen && !cleanReading && !loadingDoc && !loadError && (
+      {!isFullscreen && !cleanReading && !loadingDoc && !loadError && !drivePreviewId && !hideAllToolbars && (
         <div className={`border-b px-3 sm:px-5 py-2 flex flex-wrap items-center justify-between gap-2 text-xs ${themeStyle.headerBg}`}>
           {readingMode === 'book' && !structuredBook && (
             <div className="flex flex-wrap items-center gap-3">
@@ -2181,12 +2274,38 @@ export function BookReaderModal({
                 Carregando estrutura, sumário e páginas progressivamente.
               </p>
             </div>
+          ) : drivePreviewId ? (
+            <div className={`my-auto max-w-4xl w-full h-[78vh] rounded-2xl border flex flex-col overflow-hidden shadow-2xl ${themeStyle.pageCard}`}>
+              <div className="bg-amber-50 dark:bg-amber-950/70 border-b border-amber-200 dark:border-amber-900/60 px-4 py-2.5 text-xs text-amber-900 dark:text-amber-200 flex items-center justify-between gap-3">
+                <span className="font-medium">O arquivo precisa estar compartilhado como 'qualquer pessoa com o link'. Este modo não salva progresso.</span>
+                <a href={material.url} target="_blank" rel="noopener noreferrer" className="font-bold underline shrink-0 inline-flex items-center gap-1">
+                  <span>Abrir no Drive</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              </div>
+              <iframe
+                src={`https://drive.google.com/file/d/${drivePreviewId}/preview`}
+                className="w-full flex-1 border-0 bg-white"
+                allow="autoplay"
+                title={material.title}
+              />
+            </div>
           ) : loadError ? (
             <div className={`my-auto max-w-lg w-full rounded-2xl border p-6 text-center space-y-4 ${themeStyle.pageCard}`}>
               <AlertTriangle className="w-10 h-10 text-amber-500 mx-auto" />
               <div className="space-y-1.5">
                 <h3 className="font-display text-lg font-bold">Não foi possível abrir este arquivo diretamente</h3>
-                <p className={`text-sm leading-relaxed ${themeStyle.textMuted}`}>{loadError}</p>
+                <p className={`text-sm leading-relaxed ${themeStyle.textMuted}`}>
+                  {errorCode === 'LOCAL_MISSING'
+                    ? 'O arquivo local não foi encontrado ou está inacessível no armazenamento.'
+                    : errorCode === 'AUTH_REQUIRED'
+                      ? 'Acesso restrito ou credenciais do Google Workspace necessárias. Conecte sua conta para abrir arquivos protegidos.'
+                      : errorCode === 'TOO_LARGE'
+                        ? 'O arquivo excede o limite suportado para abertura direta no leitor.'
+                        : errorCode === 'HTML_PORTAL'
+                          ? 'Este endereço corresponde a um portal web oficial ou página de notícias. Utilize o botão para abrir externamente.'
+                          : loadError || 'Não foi possível carregar este documento no leitor integrado.'}
+                </p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2.5">
                 {errorCode === 'AUTH_REQUIRED' && (
@@ -2199,23 +2318,23 @@ export function BookReaderModal({
                     {connectingDrive ? 'Conectando Google Drive...' : 'Conectar Google Drive'}
                   </button>
                 )}
-                {allowDownload && !material.url.startsWith('local://') && (
+                {material.url && !material.url.startsWith('local://') && (
                   <a
                     href={material.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="min-h-[44px] px-4 py-2 border border-current/20 text-xs font-semibold rounded-xl inline-flex items-center gap-1.5"
+                    className="min-h-[44px] px-4 py-2 bg-[#146C43] text-white text-xs font-semibold rounded-xl inline-flex items-center gap-1.5"
                   >
-                    <span>Abrir portal externo</span>
+                    <span>Abrir no site</span>
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
                 )}
                 <button
                   type="button"
                   onClick={() => void handleRequestClose()}
-                  className="min-h-[44px] px-4 py-2 border border-current/20 text-xs font-medium rounded-xl"
+                  className="min-h-[44px] px-4 py-2 border border-current/20 text-xs font-semibold rounded-xl"
                 >
-                  Voltar à biblioteca
+                  Voltar ao tópico
                 </button>
               </div>
             </div>

@@ -36,6 +36,7 @@ import {
   type ApostilaTopicEntry,
 } from '../data/apostilaMap';
 import { isInAppReadableMaterial } from '../lib/epubAndHtmlEngine';
+import { isPdfReadableMaterial } from '../lib/pdfBookEngine';
 import { searchDocumentIndexWithFallback } from '../lib/documentIndexer';
 import { BookReaderModal } from './BookReaderModal';
 import { MediaPlaybackModal } from './MediaPlaybackModal';
@@ -106,6 +107,7 @@ export function DisciplinesView({
     mode: 'internal' | 'external';
   } | null>(null);
   const [expandedApostilaIds, setExpandedApostilaIds] = useState<Record<string, boolean>>({});
+  const [otherMaterialsExpanded, setOtherMaterialsExpanded] = useState(false);
 
   useEffect(() => {
     setExpandedDisciplineId(null);
@@ -394,13 +396,13 @@ export function DisciplinesView({
                     : 'border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/30'
                 }`}
               >
-                <button
-                  type="button"
-                  aria-expanded={isDiscExpanded}
-                  onClick={() => handleToggleDiscipline(disc.id)}
-                  className="w-full min-h-[56px] px-3.5 py-3 text-left flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 transition-colors"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
+                <div className="w-full px-3.5 py-3 flex items-center justify-between gap-3">
+                  <button
+                    type="button"
+                    aria-expanded={isDiscExpanded}
+                    onClick={() => handleToggleDiscipline(disc.id)}
+                    className="flex items-center gap-3 min-w-0 text-left flex-1"
+                  >
                     <div
                       className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
                         isDiscExpanded
@@ -410,24 +412,54 @@ export function DisciplinesView({
                     >
                       <BookOpen className="w-4 h-4" />
                     </div>
-                    <div className="min-w-0">
+                    <div className="min-w-0 space-y-1 flex-1">
                       <p className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">{disc.shortName}</p>
-                      <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400 truncate">
-                        {disc.topics.length} assuntos · {disc.examQuestions} questões · {avgMastery}% domínio
-                      </p>
+                      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-500 dark:text-slate-400">
+                        <span>{disc.topics.length} assuntos</span>
+                        <span>·</span>
+                        <span>{disc.examQuestions} questões</span>
+                        <span>·</span>
+                        <span className="font-mono font-bold text-[#146C43] dark:text-emerald-400">{avgMastery}% domínio</span>
+                      </div>
+                      <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
+                        <div
+                          className="bg-[#146C43] dark:bg-emerald-400 h-full transition-all duration-300"
+                          style={{ width: `${Math.min(100, Math.max(0, avgMastery))}%` }}
+                        />
+                      </div>
                     </div>
-                  </div>
+                  </button>
+
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className="hidden sm:inline font-mono text-xs font-bold text-[#146C43] dark:text-emerald-400 tabular-nums">
-                      {avgMastery}%
-                    </span>
-                    {isDiscExpanded ? (
-                      <ChevronUp className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-slate-400" />
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const targetTopic =
+                          disc.topics.find((t) => !(topicProgressMap[t.id]?.theoryDone && topicProgressMap[t.id]?.questionsDone)) ||
+                          disc.topics[0];
+                        if (targetTopic) {
+                          handleOpenTopicDetail(disc.id, targetTopic.id);
+                        }
+                      }}
+                      className="min-h-[36px] px-3 py-1.5 rounded-xl bg-[#E8F3EC] dark:bg-emerald-950/60 border border-[#146C43]/30 dark:border-emerald-700/50 text-[#0B3321] dark:text-emerald-300 text-xs font-semibold inline-flex items-center gap-1.5 hover:bg-[#146C43] hover:text-white transition-colors"
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">Ler apostila</span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-expanded={isDiscExpanded}
+                      onClick={() => handleToggleDiscipline(disc.id)}
+                      className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400"
+                    >
+                      {isDiscExpanded ? (
+                        <ChevronUp className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
+                      ) : (
+                        <ChevronDown className="w-4 h-4" />
+                      )}
+                    </button>
                   </div>
-                </button>
+                </div>
 
                 {/* Progressive Topics List (only visible inside the ONE expanded discipline) */}
                 {isDiscExpanded && (
@@ -478,6 +510,25 @@ export function DisciplinesView({
     const prog = topicProgressMap[topic.id];
     const noteVal = noteDrafts[topic.id] ?? prog?.notes ?? '';
 
+    const primaryApostila = focusedResources.apostilas[0];
+    const readablePdfs = focusedResources.pdfs.filter((m) => isPdfReadableMaterial(m));
+    const siteLinks = focusedResources.pdfs.filter((m) => !isPdfReadableMaterial(m));
+
+    const primaryPdf = readablePdfs[0];
+    const handleOpenMainReading = () => {
+      if (primaryApostila) {
+        handleOpenApostilaRange(primaryApostila.material, primaryApostila.entry.ranges[0].startPage);
+      } else if (primaryPdf) {
+        void handleOpenTopicMaterial(primaryPdf, topic.title, discipline.id);
+      }
+    };
+
+    const mainButtonText = primaryApostila
+      ? `Ler na apostila · p. ${primaryApostila.entry.ranges[0].startPage}`
+      : primaryPdf
+      ? `Ler material · ${primaryPdf.title}`
+      : `Acervo da disciplina`;
+
     return (
       <div className="space-y-4 sm:space-y-5">
         {/* Compact Breadcrumb + Prominent Back Button */}
@@ -515,8 +566,8 @@ export function DisciplinesView({
           )}
         </div>
 
-        {/* Assunto Header & Subtópicos */}
-        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 space-y-3">
+        {/* Assunto Header & Nova Ordem */}
+        <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
             <span>
               {discipline.editalBlock} · {topic.highYield ? 'Alta incidência CETAP' : 'Conteúdo Programático'}
@@ -525,10 +576,43 @@ export function DisciplinesView({
               {prog?.masteryLevel ?? 0}% domínio
             </span>
           </div>
+
           <h1 className="font-display text-lg sm:text-2xl font-bold text-slate-900 dark:text-slate-100 leading-snug">
             {topic.title}
           </h1>
 
+          {/* 1. BOTÃO PRINCIPAL: Ler na apostila */}
+          <div>
+            <button
+              type="button"
+              onClick={handleOpenMainReading}
+              className="w-full sm:w-auto min-h-[50px] px-6 py-3 bg-[#0B3321] hover:bg-[#146C43] text-white text-sm font-bold rounded-xl shadow-md inline-flex items-center justify-center gap-2.5 transition-colors"
+            >
+              <BookOpen className="w-5 h-5 text-emerald-300" />
+              <span>{mainButtonText}</span>
+              <ChevronRight className="w-4 h-4 opacity-75" />
+            </button>
+          </div>
+
+          {/* 2. Atalhos: Teoria · Resumo · Questões */}
+          {focusedResources.apostilas.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <span className="text-xs font-bold text-slate-700 dark:text-slate-300 mr-1">Atalhos na apostila:</span>
+              {focusedResources.apostilas.map((item, idx) => (
+                <button
+                  key={`${item.material.id}-${idx}`}
+                  type="button"
+                  onClick={() => handleOpenApostilaRange(item.material, item.entry.ranges[0].startPage)}
+                  className="min-h-[36px] px-3 py-1.5 rounded-xl border border-[#146C43]/30 dark:border-emerald-700/50 bg-[#E8F3EC] dark:bg-emerald-950/50 text-[#0B3321] dark:text-emerald-300 text-xs font-semibold inline-flex items-center gap-1.5"
+                >
+                  <span>{APOSTILA_KIND_LABELS[item.entry.kind]}</span>
+                  <span className="font-mono text-[11px] opacity-85">p. {item.entry.ranges[0].startPage}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* 3. Subtópicos do edital */}
           {topic.subtopics.length > 0 && (
             <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-1.5">
               <p className="text-xs font-bold text-slate-700 dark:text-slate-300">Subtópicos do Edital:</p>
@@ -543,7 +627,7 @@ export function DisciplinesView({
             </div>
           )}
 
-          {/* Checklist de progresso do tópico */}
+          {/* 4. Checklist de progresso do tópico */}
           <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex flex-wrap gap-2">
             {(
               [
@@ -573,15 +657,15 @@ export function DisciplinesView({
           </div>
         </section>
 
-        {/* Materiais vinculados em listas verticais limpas */}
+        {/* 5. Materiais vinculados: Apostilas & PDFs vs Outros materiais (sites externos) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {/* PDFs e Apostilas */}
+          {/* Apostila e PDFs (Leitor interno) */}
           <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
             <div className="flex items-center justify-between">
               <h2 className="font-display text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
                 <FileText className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
                 <span>
-                  PDFs e Apostilas ({focusedResources.apostilas.length + focusedResources.pdfs.length})
+                  Apostila e PDFs ({focusedResources.apostilas.length + readablePdfs.length})
                 </span>
               </h2>
               {onNavigate && (
@@ -595,9 +679,9 @@ export function DisciplinesView({
               )}
             </div>
 
-            {focusedResources.apostilas.length === 0 && focusedResources.pdfs.length === 0 ? (
+            {focusedResources.apostilas.length === 0 && readablePdfs.length === 0 ? (
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Nenhum PDF ou apostila vinculada especificamente a este assunto. Consulte o acervo da disciplina ou envie na Central.
+                Nenhum PDF ou apostila vinculada especificamente a este assunto. Consulte o acervo da disciplina.
               </p>
             ) : (
               <div className="space-y-2.5">
@@ -635,7 +719,7 @@ export function DisciplinesView({
                           </p>
                         </div>
                         <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[#0B3321] dark:text-emerald-300 shrink-0">
-                          <span className="hidden sm:inline">Ler na apostila</span>
+                          <span className="hidden sm:inline">Ler</span>
                           <BookOpen className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
                         </span>
                       </button>
@@ -683,7 +767,7 @@ export function DisciplinesView({
                   );
                 })}
 
-                {focusedResources.pdfs.slice(0, 6).map((mat) => (
+                {readablePdfs.slice(0, 6).map((mat) => (
                   <button
                     key={mat.id}
                     type="button"
@@ -763,6 +847,60 @@ export function DisciplinesView({
             )}
           </section>
         </div>
+
+        {/* 6. Outros materiais / Sites externos (Recolhidos por padrão, abrindo em nova aba sem PDF reader) */}
+        {siteLinks.length > 0 && (
+          <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
+            <button
+              type="button"
+              aria-expanded={otherMaterialsExpanded}
+              onClick={() => setOtherMaterialsExpanded((prev) => !prev)}
+              className="w-full flex items-center justify-between gap-2 text-left"
+            >
+              <h2 className="font-display text-sm sm:text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <ExternalLink className="w-4 h-4 text-[#146C43] dark:text-emerald-400" />
+                <span>Outros materiais & Sites externos ({siteLinks.length})</span>
+              </h2>
+              {otherMaterialsExpanded ? (
+                <ChevronUp className="w-4 h-4 text-slate-400 shrink-0" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-slate-400 shrink-0" />
+              )}
+            </button>
+
+            {otherMaterialsExpanded && (
+              <div className="space-y-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                {siteLinks.map((mat) => (
+                  <button
+                    key={mat.id}
+                    type="button"
+                    onClick={() => {
+                      if (mat.url) {
+                        window.open(mat.url, '_blank', 'noopener,noreferrer');
+                      }
+                    }}
+                    className="w-full min-h-[52px] p-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 hover:border-[#146C43] text-left flex items-center justify-between gap-2.5"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="inline-block px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide rounded-md bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300">
+                          site
+                        </span>
+                        <p className="text-xs sm:text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {mat.title}
+                        </p>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                        {mat.subtitle || mat.institution || mat.url}
+                      </p>
+                    </div>
+                    <ExternalLink className="w-4 h-4 text-[#146C43] dark:text-emerald-400 shrink-0" />
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
 
         {/* Questões relacionadas & Recomendações de estudo */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

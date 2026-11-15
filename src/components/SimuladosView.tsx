@@ -4,6 +4,8 @@ import {
   Bookmark,
   BookOpen,
   CheckCircle2,
+  ChevronDown,
+  ChevronUp,
   Clock,
   ExternalLink,
   Flag,
@@ -108,8 +110,48 @@ export function SimuladosView({
     [questions, isMedio, activeDisciplineIds]
   );
 
-  // Automatic Simulado Generator State
-  const [generatorOpen, setGeneratorOpen] = useState(true);
+  // Automatic Simulado Generator & Collapsible Sections State (persisted in localStorage, collapsed by default on mobile)
+  const [cargoOverviewOpen, setCargoOverviewOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) return false;
+    try {
+      const stored = localStorage.getItem('alepa_simulados_cargo_overview_open');
+      if (stored !== null) return stored === 'true';
+    } catch {}
+    return false;
+  });
+
+  const [generatorOpen, setGeneratorOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) return false;
+    try {
+      const stored = localStorage.getItem('alepa_simulados_generator_open');
+      if (stored !== null) return stored === 'true';
+    } catch {}
+    return false;
+  });
+
+  const [sourcesOpen, setSourcesOpen] = useState<boolean>(() => {
+    if (typeof window !== 'undefined' && window.innerWidth < 768) return false;
+    try {
+      const stored = localStorage.getItem('alepa_simulados_sources_open');
+      if (stored !== null) return stored === 'true';
+    } catch {}
+    return false;
+  });
+
+  const allPanelsCollapsed = !cargoOverviewOpen && !generatorOpen && !sourcesOpen;
+
+  const handleToggleAllPanels = () => {
+    const nextState = allPanelsCollapsed;
+    setCargoOverviewOpen(nextState);
+    setGeneratorOpen(nextState);
+    setSourcesOpen(nextState);
+    try {
+      localStorage.setItem('alepa_simulados_cargo_overview_open', String(nextState));
+      localStorage.setItem('alepa_simulados_generator_open', String(nextState));
+      localStorage.setItem('alepa_simulados_sources_open', String(nextState));
+    } catch {}
+  };
+
   const [genSelectedDiscs, setGenSelectedDiscs] = useState<string[]>(() =>
     activeDisciplines.map((d) => d.id)
   );
@@ -728,6 +770,15 @@ export function SimuladosView({
         <div className="flex flex-wrap items-center gap-2 shrink-0">
           <button
             type="button"
+            onClick={handleToggleAllPanels}
+            className="min-h-[44px] px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors"
+          >
+            {allPanelsCollapsed ? <ChevronDown className="w-4 h-4 text-emerald-600 dark:text-emerald-400" /> : <ChevronUp className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />}
+            <span>{allPanelsCollapsed ? 'Expandir painéis' : 'Recolher painéis'}</span>
+          </button>
+
+          <button
+            type="button"
             disabled={generatingAiDeck}
             onClick={() => void handleGenerateAiQuestionsDeck()}
             className="min-h-[44px] px-3.5 py-2 bg-[#E8F3EC] dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 text-[#0B3321] dark:text-emerald-200 border border-emerald-200 dark:border-emerald-800 text-xs sm:text-sm font-semibold rounded-xl inline-flex items-center gap-1.5 whitespace-nowrap shrink-0"
@@ -749,8 +800,19 @@ export function SimuladosView({
 
       {/* Separação de Simulados por Cargo + Quantidade de Questões na Prova */}
       <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div>
+        <button
+          type="button"
+          aria-expanded={cargoOverviewOpen}
+          onClick={() => {
+            setCargoOverviewOpen((prev) => {
+              const next = !prev;
+              try { localStorage.setItem('alepa_simulados_cargo_overview_open', String(next)); } catch {}
+              return next;
+            });
+          }}
+          className="w-full flex items-center justify-between text-left gap-3"
+        >
+          <div className="min-w-0">
             <p className="text-xs font-semibold text-[#146C43] dark:text-emerald-400">
               {isMedio
                 ? `Simulado separado por cargo · Nível Médio (${activeCargoInfo.cargoNumber} – ${activeCargoInfo.code})`
@@ -758,17 +820,22 @@ export function SimuladosView({
             </p>
             <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
               {isMedio
-                ? 'Questões e simulados isolados para o Edital 001/2026 (Ensino Médio Completo), respeitando o conteúdo e o nível de cobrança da Fundação CETAP.'
-                : 'Questões e simulados isolados para o Edital 002/2026 (Ensino Superior), respeitando o aprofundamento técnico do Cargo 03.'}
+                ? 'Questões e simulados isolados para o Edital 001/2026 (Ensino Médio Completo), respeitando a Fundação CETAP.'
+                : 'Questões e simulados isolados para o Edital 002/2026 (Ensino Superior), respeitando o Cargo 03.'}
             </p>
           </div>
-          <div className="text-left sm:text-right font-mono tabular-nums shrink-0">
-            <span className="text-sm font-bold text-[#0B3321] dark:text-emerald-300">50 questões objetivas</span>
-            <p className="text-[11px] text-slate-500 dark:text-slate-400">Valor total: 10,0 pontos (0,20 pt/questão)</p>
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="hidden sm:block text-right font-mono tabular-nums">
+              <span className="text-sm font-bold text-[#0B3321] dark:text-emerald-300">50 questões</span>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">10,0 pts (0,20/q)</p>
+            </div>
+            <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500">
+              {cargoOverviewOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+            </div>
           </div>
-        </div>
+        </button>
 
-        {isMedio && (
+        {cargoOverviewOpen && isMedio && (
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs">
             <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/80 dark:border-slate-700">
               <p className="font-mono font-bold text-[#0B3321] dark:text-emerald-300">20 questões</p>
@@ -1072,81 +1139,99 @@ export function SimuladosView({
       </section>
 
       {/* 4 Fontes de Questões & Simulados: Oficiais vs. Treinamento */}
-      <section className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4">
-        <div>
-          <h2 className="font-display text-base font-bold text-slate-900">
-            Origens de Questões e Simulados (Oficiais × Treinamento Complementar)
-          </h2>
-          <p className="text-xs text-slate-600 mt-0.5">
-            Separação explícita entre questões oficiais (CETAP, Câmara e ALEPA) e plataformas não oficiais para treinamento.
-          </p>
-        </div>
+      <section className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-5 space-y-4">
+        <button
+          type="button"
+          aria-expanded={sourcesOpen}
+          onClick={() => {
+            setSourcesOpen((prev) => {
+              const next = !prev;
+              try { localStorage.setItem('alepa_simulados_sources_open', String(next)); } catch {}
+              return next;
+            });
+          }}
+          className="w-full flex items-center justify-between text-left gap-3"
+        >
+          <div>
+            <h2 className="font-display text-base font-bold text-slate-900 dark:text-slate-100">
+              Origens de Questões e Simulados (Oficiais × Treinamento Complementar)
+            </h2>
+            <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
+              Separação explícita entre questões oficiais (CETAP, Câmara e ALEPA) e plataformas não oficiais para treinamento.
+            </p>
+          </div>
+          <div className="p-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-500 shrink-0">
+            {sourcesOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </div>
+        </button>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-          <a
-            href="https://www.pciconcursos.com.br/provas/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-3.5 rounded-xl border border-slate-200 hover:border-[#0B3321] bg-slate-50/50 flex flex-col justify-between gap-2"
-          >
-            <div>
-              <p className="text-[11px] font-semibold text-[#146C43]">Oficial · Provas Anteriores</p>
-              <p className="text-sm font-bold text-slate-900 mt-0.5">Fundação CETAP</p>
-              <p className="text-xs text-slate-600 mt-0.5">Acervo de provas anteriores e gabaritos no PCI Provas.</p>
-            </div>
-            <span className="text-xs font-semibold text-[#0B3321] inline-flex items-center gap-1">
-              Abrir PCI Provas <ExternalLink className="w-3 h-3" />
-            </span>
-          </a>
+        {sourcesOpen && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800">
+            <a
+              href="https://www.pciconcursos.com.br/provas/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/50 dark:bg-slate-800/40 flex flex-col justify-between gap-2 transition-colors"
+            >
+              <div>
+                <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">Oficial · Provas Anteriores</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5">Fundação CETAP</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Acervo de provas anteriores e gabaritos no PCI Provas.</p>
+              </div>
+              <span className="text-xs font-semibold text-[#0B3321] dark:text-emerald-400 inline-flex items-center gap-1">
+                Abrir PCI Provas <ExternalLink className="w-3 h-3" />
+              </span>
+            </a>
 
-          <a
-            href="https://www2.camara.leg.br/transparencia/servicos-ao-cidadao/educacao-cultura-e-responsabilidade-social"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-3.5 rounded-xl border border-slate-200 hover:border-[#0B3321] bg-slate-50/50 flex flex-col justify-between gap-2"
-          >
-            <div>
-              <p className="text-[11px] font-semibold text-[#146C43]">Oficial · Questões Legislativas</p>
-              <p className="text-sm font-bold text-slate-900 mt-0.5">Câmara dos Deputados</p>
-              <p className="text-xs text-slate-600 mt-0.5">Educação legislativa e técnica parlamentar oficial.</p>
-            </div>
-            <span className="text-xs font-semibold text-[#0B3321] inline-flex items-center gap-1">
-              Abrir Câmara <ExternalLink className="w-3 h-3" />
-            </span>
-          </a>
+            <a
+              href="https://www2.camara.leg.br/transparencia/servicos-ao-cidadao/educacao-cultura-e-responsabilidade-social"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/50 dark:bg-slate-800/40 flex flex-col justify-between gap-2 transition-colors"
+            >
+              <div>
+                <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">Oficial · Questões Legislativas</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5">Câmara dos Deputados</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Educação legislativa e técnica parlamentar oficial.</p>
+              </div>
+              <span className="text-xs font-semibold text-[#0B3321] dark:text-emerald-400 inline-flex items-center gap-1">
+                Abrir Câmara <ExternalLink className="w-3 h-3" />
+              </span>
+            </a>
 
-          <a
-            href="https://bancodeleis.alepa.pa.gov.br/index.php?p=1&tipo=10"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-3.5 rounded-xl border border-slate-200 hover:border-[#0B3321] bg-slate-50/50 flex flex-col justify-between gap-2"
-          >
-            <div>
-              <p className="text-[11px] font-semibold text-[#146C43]">Oficial · Legislação Estadual</p>
-              <p className="text-sm font-bold text-slate-900 mt-0.5">Banco de Leis da ALEPA</p>
-              <p className="text-xs text-slate-600 mt-0.5">Base normativa estadual para questões de legislação.</p>
-            </div>
-            <span className="text-xs font-semibold text-[#0B3321] inline-flex items-center gap-1">
-              Abrir Banco de Leis <ExternalLink className="w-3 h-3" />
-            </span>
-          </a>
+            <a
+              href="https://bancodeleis.alepa.pa.gov.br/index.php?p=1&tipo=10"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3.5 rounded-xl border border-slate-200 dark:border-slate-700 hover:border-[#0B3321] dark:hover:border-emerald-500 bg-slate-50/50 dark:bg-slate-800/40 flex flex-col justify-between gap-2 transition-colors"
+            >
+              <div>
+                <p className="text-[11px] font-semibold text-[#146C43] dark:text-emerald-400">Oficial · Legislação Estadual</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5">Banco de Leis da ALEPA</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Base normativa estadual para questões de legislação.</p>
+              </div>
+              <span className="text-xs font-semibold text-[#0B3321] dark:text-emerald-400 inline-flex items-center gap-1">
+                Abrir Banco de Leis <ExternalLink className="w-3 h-3" />
+              </span>
+            </a>
 
-          <a
-            href="https://www.pciconcursos.com.br/simulados/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-3.5 rounded-xl border border-amber-200 hover:border-amber-600 bg-amber-50/50 flex flex-col justify-between gap-2"
-          >
-            <div>
-              <p className="text-[11px] font-semibold text-amber-800">Não oficial · Treinamento complementar</p>
-              <p className="text-sm font-bold text-slate-900 mt-0.5">PCI Concursos Simulados</p>
-              <p className="text-xs text-slate-600 mt-0.5">Plataforma externa de treino por disciplina.</p>
-            </div>
-            <span className="text-xs font-semibold text-amber-900 inline-flex items-center gap-1">
-              Abrir PCI Simulados <ExternalLink className="w-3 h-3" />
-            </span>
-          </a>
-        </div>
+            <a
+              href="https://www.pciconcursos.com.br/simulados/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="p-3.5 rounded-xl border border-amber-200 dark:border-amber-900/60 hover:border-amber-600 dark:hover:border-amber-500 bg-amber-50/50 dark:bg-amber-950/20 flex flex-col justify-between gap-2 transition-colors"
+            >
+              <div>
+                <p className="text-[11px] font-semibold text-amber-800 dark:text-amber-400">Não oficial · Treinamento complementar</p>
+                <p className="text-sm font-bold text-slate-900 dark:text-slate-100 mt-0.5">PCI Concursos Simulados</p>
+                <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">Plataforma externa de treino por disciplina.</p>
+              </div>
+              <span className="text-xs font-semibold text-amber-900 dark:text-amber-300 inline-flex items-center gap-1">
+                Abrir PCI Simulados <ExternalLink className="w-3 h-3" />
+              </span>
+            </a>
+          </div>
+        )}
       </section>
 
       {/* Controls Bar */}
