@@ -66,6 +66,7 @@ import {
   StudyMaterial,
 } from '../types';
 import { FullscreenZoomToolbar, useFullscreenZoom } from './ui/CampusPrimitives';
+import { computeCanvasPixelRatio } from '../lib/pdfRenderScale';
 
 type SidebarTab = 'outline' | 'bookmarks' | 'highlights' | 'annotations' | 'search';
 
@@ -182,6 +183,8 @@ interface PdfCanvasSheetProps {
   pageNumber: number;
   targetWidth: number;
   scaleOverride?: number;
+  /** Zoom visual (CSS transform) já assentado; define a nitidez do canvas. 1 = sem zoom. */
+  zoomRender?: number;
   theme: BookReaderTheme;
   allowDownload: boolean;
   onTextSelected?: (quote: string, pageNum: number) => void;
@@ -193,6 +196,7 @@ function PdfCanvasSheet({
   pageNumber,
   targetWidth,
   scaleOverride,
+  zoomRender = 1,
   theme,
   allowDownload,
   onTextSelected,
@@ -202,6 +206,9 @@ function PdfCanvasSheet({
   const textLayerRef = useRef<HTMLDivElement | null>(null);
   const renderTaskRef = useRef<RenderTask | null>(null);
   const textLayerInstanceRef = useRef<TextLayer | null>(null);
+  const hasRenderedRef = useRef(false);
+  const textDocRef = useRef<PDFDocumentProxy | null>(null);
+  const textKeyRef = useRef('');
   const [rendering, setRendering] = useState(true);
   const [dims, setDims] = useState<{ w: number; h: number }>({
     w: Math.max(260, Math.round(targetWidth)),
@@ -212,14 +219,10 @@ function PdfCanvasSheet({
     let cancelled = false;
 
     const renderPage = async () => {
-      setRendering(true);
+      // Spinner só na 1ª renderização; refinamentos de zoom são silenciosos.
+      if (!hasRenderedRef.current) setRendering(true);
       try {
         renderTaskRef.current?.cancel();
-      } catch {
-        // ignore cancel
-      }
-      try {
-        textLayerInstanceRef.current?.cancel();
       } catch {
         // ignore cancel
       }
@@ -236,28 +239,58 @@ function PdfCanvasSheet({
         const viewport = page.getViewport({ scale: computedScale });
         const w = Math.floor(viewport.width);
         const h = Math.floor(viewport.height);
-        setDims({ w, h });
+        setDims((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
 
         const canvas = canvasRef.current;
         if (!canvas || cancelled) return;
 
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        canvas.width = Math.max(1, Math.floor(viewport.width * dpr));
-        canvas.height = Math.max(1, Math.floor(viewport.height * dpr));
-        canvas.style.width = `${w}px`;
-        canvas.style.height = `${h}px`;
+        // Nitidez: DPR real do aparelho x zoom visual, com limites de memória.
+        const pixelRatio = computeCanvasPixelRatio({
+          devicePixelRatio: window.devicePixelRatio || 1,
+          zoom: zoomRender,
+          layoutWidth: w,
+          layoutHeight: h,
+        });
+        const pxW = Math.max(1, Math.floor(w * pixelRatio));
+        const pxH = Math.max(1, Math.floor(h * pixelRatio));
+
+        // Renderiza fora da tela e só então troca, evitando piscar ao refinar.
+        const offscreen = document.createElement('canvas');
+        offscreen.width = pxW;
+        offscreen.height = pxH;
 
         const task = page.render({
-          canvas,
+          canvas: offscreen,
           viewport,
-          transform: dpr !== 1 ? [dpr, 0, 0, dpr, 0, 0] : undefined,
+          transform: pixelRatio !== 1 ? [pixelRatio, 0, 0, pixelRatio, 0, 0] : undefined,
         });
         renderTaskRef.current = task;
         await task.promise;
-        if (cancelled) return;
+        if (cancelled) {
+          offscreen.width = 0;
+          offscreen.height = 0;
+          return;
+        }
 
+        canvas.width = pxW;
+        canvas.height = pxH;
+        canvas.style.width = `${w}px`;
+        canvas.style.height = `${h}px`;
+        canvas.getContext('2d')?.drawImage(offscreen, 0, 0);
+        offscreen.width = 0;
+        offscreen.height = 0;
+        hasRenderedRef.current = true;
+
+        // Camada de texto é vetorial: só refaz quando a página/escala de layout muda.
+        const textKey = `${pageNumber}:${computedScale}`;
         const textContainer = textLayerRef.current;
-        if (textContainer) {
+        const textUpToDate = textDocRef.current === pdfDoc && textKeyRef.current === textKey;
+        if (textContainer && !textUpToDate) {
+          try {
+            textLayerInstanceRef.current?.cancel();
+          } catch {
+            // ignore cancel
+          }
           textContainer.innerHTML = '';
           textContainer.style.setProperty('--total-scale-factor', String(viewport.scale));
           textContainer.style.width = `${w}px`;
@@ -273,6 +306,8 @@ function PdfCanvasSheet({
           });
           textLayerInstanceRef.current = tl;
           await tl.render();
+          textDocRef.current = pdfDoc;
+          textKeyRef.current = textKey;
         }
       } catch (err) {
         if ((err as { name?: string })?.name !== 'RenderingCancelledException') {
@@ -298,7 +333,7 @@ function PdfCanvasSheet({
         // ignore
       }
     };
-  }, [pdfDoc, pageNumber, targetWidth, scaleOverride]);
+  }, [pdfDoc, pageNumber, targetWidth, scaleOverride, zoomRender]);
 
   const handleMouseUp = () => {
     if (!onTextSelected) return;
@@ -436,6 +471,17 @@ export function BookReaderModal({
     step: 0.25,
   });
   const isFullscreen = zoom.isFullscreen;
+
+  // Zoom "assentado": o canvas só é re-renderizado em alta resolução quando o
+  // gesto/zoom termina (durante a pinça o CSS transform mantém a fluidez).
+  const [renderZoom, setRenderZoom] = useState(1);
+  useEffect(() => {
+    if (zoom.isGesturing) return;
+    const id = window.setTimeout(() => {
+      setRenderZoom(Math.max(1, Math.ceil(zoom.scale * 4) / 4));
+    }, 220);
+    return () => window.clearTimeout(id);
+  }, [zoom.scale, zoom.isGesturing]);
 
   const [bookmarks, setBookmarks] = useState<ReaderBookmark[]>(initialSaved?.bookmarks || []);
   const [highlights, setHighlights] = useState<ReaderHighlight[]>(initialSaved?.highlights || []);
@@ -2264,7 +2310,7 @@ export function BookReaderModal({
             style={zoom.transformStyle}
             className={`zoom-transform-stage pdf-zoom-stage pinch-zoom-surface w-full flex-1 flex flex-col items-center ${
               zoom.scale > 1.02 ? 'cursor-grab active:cursor-grabbing' : ''
-            }`}
+            } ${zoom.isGesturing ? 'is-gesturing' : ''}`}
           >
           {loadingDoc ? (
             <div className="my-auto flex flex-col items-center gap-3 text-center p-8">
@@ -2401,6 +2447,7 @@ export function BookReaderModal({
                       pageNumber={currentPage}
                       targetWidth={bookSpreadPageWidth}
                       scaleOverride={zoomScale > 0 ? zoomScale : undefined}
+                      zoomRender={renderZoom}
                       theme={theme}
                       allowDownload={allowDownload}
                       onTextSelected={(quote, p) => setSelectedQuote({ quote, page: p })}
@@ -2414,6 +2461,7 @@ export function BookReaderModal({
                         pageNumber={currentPage + 1}
                         targetWidth={bookSpreadPageWidth}
                         scaleOverride={zoomScale > 0 ? zoomScale : undefined}
+                        zoomRender={renderZoom}
                         theme={theme}
                         allowDownload={allowDownload}
                         onTextSelected={(quote, p) => setSelectedQuote({ quote, page: p })}
@@ -2439,6 +2487,7 @@ export function BookReaderModal({
                     pageNumber={currentPage}
                     targetWidth={bookSingleTargetWidth}
                     scaleOverride={zoomScale > 0 ? zoomScale : undefined}
+                    zoomRender={renderZoom}
                     theme={theme}
                     allowDownload={allowDownload}
                     onTextSelected={(quote, p) => setSelectedQuote({ quote, page: p })}
@@ -2542,6 +2591,7 @@ export function BookReaderModal({
                 pageNumber={currentPage}
                 targetWidth={originalTargetWidth}
                 scaleOverride={zoomScale > 0 ? zoomScale : undefined}
+                zoomRender={renderZoom}
                 theme={theme}
                 allowDownload={allowDownload}
                 onTextSelected={(quote, p) => setSelectedQuote({ quote, page: p })}

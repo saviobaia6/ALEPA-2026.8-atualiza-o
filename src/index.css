@@ -235,6 +235,11 @@
 }
 
 .zoom-transform-stage {
-  will-change: transform;
   transform-origin: center center;
+}
+
+/* will-change fixa a rasterização na escala inicial e borra o conteúdo ampliado.
+   Só é ativado enquanto o gesto de pinça está em andamento. */
+.zoom-transform-stage.is-gesturing {
+  will-change: transform;
 }
